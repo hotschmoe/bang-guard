@@ -3,7 +3,7 @@
 set -euo pipefail
 
 main() {
-  local target=both version=v0.2.0 source_dir= uninstall=0
+  local target=both version=v0.3.0 source_dir= uninstall=0
   local pi_dir="${HOME}/.pi/agent" omp_dir="${HOME}/.omp/agent"
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -22,7 +22,7 @@ main() {
         cat <<'HELP'
 Usage: bash install.sh [options]
   --target pi|omp|both  Install for these clients (default: both)
-  --version REF        Git tag or commit to download (default: v0.2.0)
+  --version REF        Git tag or commit to download (default: v0.3.0)
   --pi-dir DIR         Pi agent directory (default: ~/.pi/agent)
   --omp-dir DIR        OMP agent directory (default: ~/.omp/agent)
   --source-dir DIR     Install from an existing checkout instead of downloading

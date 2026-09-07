@@ -13,15 +13,27 @@ either client; no Rust compiler, Dart runtime, daemon, or server changes require
 Linux, macOS, or Windows through WSL, with Pi and/or OMP already installed:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.2.0/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.sh | bash
 ```
+
+Native Windows (PowerShell 5.1 or 7, x64 or ARM64):
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.ps1)))
+```
+
+The PowerShell installer uses the same architecture-independent TypeScript
+extension. No compiler, separate binary, administrator prompt, or WSL is needed.
+Pi/OMP and their upstream runtime requirements must already be installed.
+Use `-Target Pi` or `-Target Omp` to select one client; `-PiDir` and `-OmpDir`
+support custom agent directories. Install again to upgrade with a backup.
 
 Restart your client and run `/bang-guard` to check status. The default installer
 sets up both clients. To install only one:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.2.0/install.sh | bash -s -- --target pi
-curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.2.0/install.sh | bash -s -- --target omp
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.sh | bash -s -- --target pi
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.sh | bash -s -- --target omp
 ```
 
 The installer copies one file to each selected directory:
@@ -122,7 +134,7 @@ the field. Verify that your specific backend accepts and honors it before rollou
 Rotating a salt bypasses old prefix-cache entries; it does not flush GPU memory,
 reset all MTP state, or restart the model server.
 
-## Scope of v0.2.0
+## Scope of v0.3.0
 
 - Automatic recovery is tested in Pi's complete session lifecycle and in
   long-lived OMP sessions. **Pi `-p` scripts also wait for automatic recovery
@@ -149,11 +161,17 @@ reset all MTP state, or restart the model server.
 ## Uninstall
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.2.0/install.sh | bash -s -- --uninstall
+curl -fsSL https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.sh | bash -s -- --uninstall
 ```
 
 Use the same target/directory options used for installation. Restart the client.
 Backups, other extensions, and settings are preserved.
+
+Native Windows uninstall:
+
+```powershell
+& ([scriptblock]::Create((irm https://raw.githubusercontent.com/hotschmoe/bang-guard/v0.3.0/install.ps1))) -Uninstall
+```
 
 ## Development and validation
 
@@ -168,6 +186,8 @@ escaped JSON arguments, pre-execution blocking, context cleanup, automatic
 continuation, retry limits/reset, shutdown, salt rotation, and installer
 integrity/idempotency/uninstall behavior. Unit/installer CI runs on Linux and
 macOS; pinned real Pi and OMP integration tests run on Linux.
+Windows installer tests run under both Windows PowerShell 5.1 and PowerShell 7,
+including checksum validation, backups, preserving settings, and uninstalling.
 
 An offline integration test against Pi `0.84.3`'s real extension loader,
 extension runner, and agent core verifies cancellation of a fake text/thinking

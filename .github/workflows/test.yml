@@ -3,6 +3,16 @@ on: [push, pull_request]
 permissions:
   contents: read
 jobs:
+  windows-installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Windows PowerShell 5.1 installer
+        shell: powershell
+        run: ./tests/install.test.ps1
+      - name: Test PowerShell 7 installer
+        shell: pwsh
+        run: ./tests/install.test.ps1
   test:
     strategy:
       matrix:
