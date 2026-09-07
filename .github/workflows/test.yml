@@ -23,3 +23,33 @@ jobs:
           else
             shasum -a 256 -c checksums.sha256
           fi
+  pi-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned Pi SDK in a temporary directory
+        run: npm install --prefix "$RUNNER_TEMP/bang-guard-pi-sdk" --no-audit --no-fund @earendil-works/pi-coding-agent@0.84.3
+      - name: Test complete sessions with local HTTP streams
+        env:
+          PI_SDK_DIR: ${{ runner.temp }}/bang-guard-pi-sdk/node_modules/@earendil-works/pi-coding-agent
+        run: node tests/pi-session-integration.mjs
+      - name: Test unattended Pi CLI
+        env:
+          PI_SDK_DIR: ${{ runner.temp }}/bang-guard-pi-sdk/node_modules/@earendil-works/pi-coding-agent
+        run: node tests/pi-cli-integration.mjs
+  omp-integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned OMP SDK and Bun in a temporary directory
+        run: npm install --prefix "$RUNNER_TEMP/bang-guard-omp-sdk" --no-audit --no-fund bun@1.4.2 @oh-my-pi/pi-coding-agent@18.1.14
+      - name: Test long-lived OMP session with a local HTTP stream
+        env:
+          OMP_SDK_DIR: ${{ runner.temp }}/bang-guard-omp-sdk/node_modules/@oh-my-pi/pi-coding-agent
+        run: '"$RUNNER_TEMP/bang-guard-omp-sdk/node_modules/.bin/bun" tests/omp-integration.ts'

@@ -8,6 +8,8 @@ import { pathToFileURL } from 'node:url';
 
 const sdkDir = process.env.PI_SDK_DIR;
 assert.ok(sdkDir, 'Set PI_SDK_DIR to the installed pi-coding-agent package directory');
+// This low-level wiring tests cancellation only; full-session tests cover retries.
+process.env.BANG_GUARD_MAX_RETRIES = '0';
 const load = (relative) => import(pathToFileURL(join(sdkDir, relative)).href);
 const { loadExtensions } = await load('dist/core/extensions/loader.js');
 const { ExtensionRunner } = await load('dist/core/extensions/runner.js');

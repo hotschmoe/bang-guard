@@ -1,7 +1,21 @@
 // bang-guard: managed extension
 // No harness imports: Pi and OMP load this file directly.
 export const THRESHOLD = 32;
-const NOTICE = "bang-guard: aborted after 32 consecutive ! characters. Corrupted output will be excluded from future model context. Review completed work before resuming.";
+const NOTICE = "bang-guard: aborted after 32 consecutive ! characters. Corrupted output is excluded from future model context.";
+export const RECOVERY_MESSAGE = "bang-guard interrupted a generated response because it contained runaway exclamation output. The corrupted attempt has been excluded from your model context. Continue the user's existing task from the last completed step. Use the retained tool results; do not repeat completed actions. If an interrupted tool may have had side effects, inspect the current state before retrying it. Do not wait for a user prompt solely because this automatic recovery occurred.";
+
+export function retryLimit(value = process.env.BANG_GUARD_MAX_RETRIES): number {
+  if (value === undefined) return 3;
+  return /^(0|[1-9]\d*)$/.test(value) && Number(value) <= 100 ? Number(value) : 3;
+}
+
+/** The stable office endpoint is vLLM; other providers must explicitly opt in.
+ * An explicitly empty setting disables cache-salt injection everywhere.
+ */
+export function usesCacheSalt(model: any, setting = process.env.BANG_GUARD_CACHE_SALT_PROVIDERS): boolean {
+  if (setting !== undefined) return setting.split(",").map(s => s.trim()).filter(Boolean).includes(model?.provider);
+  return model?.id === "hotschmoe-dd" && model?.api === "openai-completions";
+}
 
 /** Bounded state per content block; JSON unicode escapes may span chunks. */
 export class BangDetector {
@@ -78,10 +92,15 @@ export function cleanContext(messages: Message[], tainted = new Set<number>()): 
 // Structural API intentionally supports both hosts without installing either SDK.
 export default function bangGuard(api: any): void {
   let tripped = false;
+  let active = true;
+  let paused = false;
+  let retries = 0;
+  let recoveryQueued = false;
+  const maxRetries = retryLimit();
+  const saltSetting = process.env.BANG_GUARD_CACHE_SALT_PROVIDERS;
   let currentTimestamp: number | undefined;
   const tainted = new Set<number>();
   const detectors = new Map<string, BangDetector>();
-  const saltProviders = new Set((process.env.BANG_GUARD_CACHE_SALT_PROVIDERS ?? "").split(",").map(s => s.trim()).filter(Boolean));
   const newSalt = () => `bang-guard-${crypto.randomUUID()}`;
   let cacheSalt = newSalt();
   const trip = (ctx: any) => {
@@ -94,13 +113,26 @@ export default function bangGuard(api: any): void {
     ctx.ui?.notify?.(NOTICE, "error");
   };
   api.on("session_start", () => {
+    active = true;
     tripped = false;
+    retries = 0;
+    recoveryQueued = false;
     currentTimestamp = undefined;
     detectors.clear();
     tainted.clear();
     cacheSalt = newSalt();
   });
-  api.on("agent_start", () => { tripped = false; detectors.clear(); });
+  api.on("session_shutdown", () => { active = false; });
+  api.on("input", (event: any) => {
+    // Our recovery is a custom extension message, not fabricated user input.
+    if (event.source !== "extension") retries = 0;
+  });
+  api.on("agent_start", () => {
+    tripped = false;
+    recoveryQueued = false;
+    currentTimestamp = undefined;
+    detectors.clear();
+  });
   api.on("message_start", (event: any) => {
     if (event.message?.role === "assistant") {
       currentTimestamp = event.message.timestamp;
@@ -127,16 +159,44 @@ export default function bangGuard(api: any): void {
     if (hasBangs(event.input)) trip(ctx);
     if (tripped) return { block: true, reason: NOTICE };
   });
+  api.on("turn_end", (event: any) => {
+    if (!tripped && ["stop", "toolUse"].includes(event.message?.stopReason) && !hasBangs(event.message?.content)) retries = 0;
+  });
+  api.on("agent_end", (_event: any, ctx: any) => {
+    if (!active || !tripped || recoveryQueued) return;
+    if (paused || retries >= maxRetries) {
+      ctx.ui?.notify?.(`${NOTICE} Automatic recovery ${paused || maxRetries === 0 ? "is paused" : `stopped after ${maxRetries} consecutive retries`}. Submit a new prompt when ready.`, "error");
+      return;
+    }
+    recoveryQueued = true;
+    retries++;
+    // Enqueue synchronously inside the host's run-end hook. A detached timer
+    // can lose an overnight print-mode process or revive a closed session.
+    api.sendMessage({
+      customType: "bang-guard-recovery",
+      content: RECOVERY_MESSAGE,
+      display: true,
+      details: { attempt: retries, maxRetries, cacheSalt: usesCacheSalt(ctx.model, saltSetting) },
+    }, { triggerTurn: true, deliverAs: "followUp" });
+    ctx.ui?.notify?.(`bang-guard: automatically continuing (${retries}/${maxRetries}).`, "info");
+  });
   api.on("context", (event: any) => ({ messages: cleanContext(event.messages, tainted) }));
   api.on("before_provider_request", (event: any, ctx: any) => {
-    if (saltProviders.has(ctx.model?.provider) && event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)) {
+    if (usesCacheSalt(ctx.model, saltSetting) && event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)) {
       return { ...event.payload, cache_salt: cacheSalt };
     }
   });
   api.registerCommand("bang-guard", {
-    description: "Show bang-guard protection and recovery status",
-    handler: async (_args: string, ctx: any) => {
-      ctx.ui?.notify?.(`bang-guard active: threshold ${THRESHOLD}. ${tripped ? "Last run aborted; submit a new prompt to resume." : "Ready."} Cache salt: ${saltProviders.has(ctx.model?.provider) ? "enabled for current provider" : "disabled for current provider"}. Automatic retry and server cache reset are not enabled.`, "info");
+    description: "Show bang-guard status, or pause/resume automatic recovery",
+    handler: async (args: string, ctx: any) => {
+      const command = args.trim();
+      if (command === "pause") paused = true;
+      else if (command === "resume") { paused = false; retries = 0; }
+      else if (command && command !== "status") {
+        ctx.ui?.notify?.("Usage: /bang-guard [status|pause|resume]", "info");
+        return;
+      }
+      ctx.ui?.notify?.(`bang-guard active: threshold ${THRESHOLD}. Auto recovery: ${paused || maxRetries === 0 ? "paused" : `on (${retries}/${maxRetries} consecutive retries used)`}. Cache salt: ${usesCacheSalt(ctx.model, saltSetting) ? "enabled" : "disabled"}. Server restarts are not performed.`, "info");
     },
   });
 }

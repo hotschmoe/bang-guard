@@ -1,6 +1,6 @@
 {
   "name": "bang-guard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Abort runaway exclamation output in Pi and Oh My Pi before it reaches tools.",
   "type": "module",
   "license": "MIT",
