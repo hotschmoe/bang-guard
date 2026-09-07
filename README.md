@@ -125,8 +125,17 @@ Tests cover the 31/32 boundary, stream chunk splits, thinking and tool streams,
 escaped JSON arguments, pre-execution blocking, context cleanup, salt rotation,
 and installer integrity/idempotency/uninstall behavior. CI runs on Linux and macOS.
 
-The extension was loaded successfully through Pi `0.84.3`'s real extension
-loader. OMP compatibility is based on its current documented shared hooks;
+An offline integration test against Pi `0.84.3`'s real extension loader,
+extension runner, and agent core verifies cancellation of a fake text/thinking
+producer at exactly 32 characters, context cleanup, and a blocked Markdown write.
+It wires SDK events in-process; it is not a full CLI or network test. Run it with
+an explicitly selected installed SDK:
+
+```bash
+PI_SDK_DIR="$(npm root -g)/@earendil-works/pi-coding-agent" node tests/pi-integration.mjs
+```
+
+OMP compatibility is based on its current documented shared hooks;
 an OMP runtime test and live vLLM cancellation/cache-recovery test are still
 required before a broad office deployment. This is an initial release.
 
